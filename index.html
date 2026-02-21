@@ -1,6 +1,6 @@
-
 <html>
-  <head>
+
+<head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script type="importmap">
     {
@@ -12,57 +12,154 @@
     }
     </script>
     <script type="module">
-      import * as THREE from 'three';
-      import { MindARThree } from 'mindar-image-three';
-      const mindarThree = new MindARThree({
-	container: document.querySelector("#container"),
-	imageTargetSrc: "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind"
-      });
-      const {renderer, scene, camera} = mindarThree;
-      const anchor = mindarThree.addAnchor(0);
-      const geometry = new THREE.PlaneGeometry(1, 0.55);
-      const material = new THREE.MeshBasicMaterial( {color: 0x00ffff, transparent: true, opacity: 0.5} );
-      const plane = new THREE.Mesh( geometry, material );
-      anchor.group.add(plane);
-      const start = async() => {
-	await mindarThree.start();
-	renderer.setAnimationLoop(() => {
-	  renderer.render(scene, camera);
-	});
-      }
-      const startButton = document.querySelector("#startButton");
-      startButton.addEventListener("click", () => {
-	start();
-      });
-      stopButton.addEventListener("click", () => {
-	mindarThree.stop();
-	mindarThree.renderer.setAnimationLoop(null);
-      });
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { MindARThree } from 'mindar-image-three';
+
+        const mindarThree = new MindARThree({
+            container: document.querySelector("#container"),
+            imageTargetSrc: "targets.mind"
+        });
+        const { renderer, scene, camera } = mindarThree;
+
+        // Fix black texture processing on GLTF models
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.0;
+
+        // Add proper lighting to illuminate the 3D model textures
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.25);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        dirLight.position.set(2, 5, 5);
+        scene.add(dirLight);
+
+        const anchor = mindarThree.addAnchor(0);
+
+        // 1) Video setup
+        const video = document.createElement('video');
+        video.src = 'video/Big_Buck_Bunny_360_10s_2MB.mp4';
+        video.crossOrigin = 'anonymous';
+        video.loop = true;
+        video.muted = true;
+        video.playsInline = true;
+
+        const videoTexture = new THREE.VideoTexture(video);
+        const geometry = new THREE.PlaneGeometry(1, 0.5625);
+        const material = new THREE.MeshBasicMaterial({ map: videoTexture, transparent: true });
+        const plane = new THREE.Mesh(geometry, material);
+
+        // Video plane matches the 3D model's rotation exactly to sit flush, offset along Z to float "above" model
+        plane.rotation.set(Math.PI / 2, 0, 0);
+        plane.position.set(0, 0, 1.0); // Doubled from 0.5 to 1.0 to increase height above tracker card
+
+        anchor.group.add(plane);
+
+        // 2) 3D Model setup
+        const loader = new GLTFLoader();
+        let mixer = null;
+
+        loader.load('model/source/animated helicopter-1.glb', (gltf) => {
+            const model = gltf.scene;
+
+            // Center it exactly on the image anchor origin.
+            model.position.set(0, 0, 0);
+
+            // Rotate the model so it aligns properly with the tracking card instead of standing out sideways
+            model.rotation.set(Math.PI / 2, 0, 0);
+
+            model.scale.set(0.15, 0.15, 0.15);
+            anchor.group.add(model);
+
+            if (gltf.animations && gltf.animations.length) {
+                mixer = new THREE.AnimationMixer(model);
+                const action = mixer.clipAction(gltf.animations[0]);
+                action.play();
+            }
+        });
+
+        const clock = new THREE.Clock();
+
+        // Always run the animation loop so the 3D model animates continuously
+        renderer.setAnimationLoop(() => {
+            const delta = clock.getDelta();
+            if (mixer) mixer.update(delta);
+            renderer.render(scene, camera);
+        });
+
+        const start = async () => {
+            await mindarThree.start();
+            video.play();
+        }
+
+        const startButton = document.querySelector("#startButton");
+        const stopButton = document.querySelector("#stopButton");
+
+        startButton.addEventListener("click", () => {
+            start();
+        });
+        stopButton.addEventListener("click", () => {
+            video.pause();
+            mindarThree.stop();
+        });
     </script>
     <style>
-      body {
-	margin: 0;
-      }
-      #container {
-	width: 100vw;
-	height: 100vh;
-	position: relative;
-	overflow: hidden;
-      }
-      #control {
-	position: fixed;
-	top: 0;
-	left: 0;
-	z-index: 2;
-      }
+        body {
+            margin: 0;
+            font-family: sans-serif;
+            background-color: #000;
+        }
+
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #control {
+            position: fixed;
+            bottom: 30px;
+            left: 0;
+            width: 100%;
+            z-index: 10;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            pointer-events: none;
+            /* Allows pressing screen objects behind the container div */
+        }
+
+        button {
+            pointer-events: auto;
+            /* Buttons themselves stay clickable */
+            padding: 14px 28px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 50px;
+            border: none;
+            cursor: pointer;
+            background-color: #ffffff;
+            color: #111;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            transition: transform 0.1s ease-in-out;
+        }
+
+        button:active {
+            transform: scale(0.95);
+            background-color: #eeeeee;
+        }
     </style>
-  </head>
-  <body>
+</head>
+
+<body>
     <div id="control">
-      <button id="startButton">Start</button>
-      <button id="stopButton">Stop</button>
+        <button id="startButton">Start</button>
+        <button id="stopButton">Stop</button>
     </div>
     <div id="container">
     </div>
-  </body>
+</body>
+
 </html>
