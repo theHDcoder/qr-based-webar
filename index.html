@@ -37,13 +37,18 @@
 
         const anchor = mindarThree.addAnchor(0);
 
-        // 1) Video setup
+        // 1) Video setup wrapped in Promise
         const video = document.createElement('video');
-        video.src = 'video/Big_Buck_Bunny_360_10s_2MB.mp4';
         video.crossOrigin = 'anonymous';
         video.loop = true;
         video.muted = true;
         video.playsInline = true;
+
+        const loadVideo = new Promise((resolve) => {
+            video.onloadeddata = () => resolve();
+            video.src = 'video/Big_Buck_Bunny_360_10s_2MB.mp4';
+            video.load();
+        });
 
         const videoTexture = new THREE.VideoTexture(video);
         const geometry = new THREE.PlaneGeometry(1, 0.5625);
@@ -56,27 +61,30 @@
 
         anchor.group.add(plane);
 
-        // 2) 3D Model setup
+        // 2) 3D Model setup wrapped in Promise
         const loader = new GLTFLoader();
         let mixer = null;
 
-        loader.load('model/source/animated helicopter-1.glb', (gltf) => {
-            const model = gltf.scene;
+        const loadModel = new Promise((resolve) => {
+            loader.load('model/source/animated helicopter-1.glb', (gltf) => {
+                const model = gltf.scene;
 
-            // Center it exactly on the image anchor origin.
-            model.position.set(0, 0, 0);
+                // Center it exactly on the image anchor origin.
+                model.position.set(0, 0, 0);
 
-            // Rotate the model so it aligns properly with the tracking card instead of standing out sideways
-            model.rotation.set(Math.PI / 2, 0, 0);
+                // Rotate the model so it aligns properly with the tracking card instead of standing out sideways
+                model.rotation.set(Math.PI / 2, 0, 0);
 
-            model.scale.set(0.15, 0.15, 0.15);
-            anchor.group.add(model);
+                model.scale.set(0.15, 0.15, 0.15);
+                anchor.group.add(model);
 
-            if (gltf.animations && gltf.animations.length) {
-                mixer = new THREE.AnimationMixer(model);
-                const action = mixer.clipAction(gltf.animations[0]);
-                action.play();
-            }
+                if (gltf.animations && gltf.animations.length) {
+                    mixer = new THREE.AnimationMixer(model);
+                    const action = mixer.clipAction(gltf.animations[0]);
+                    action.play();
+                }
+                resolve();
+            });
         });
 
         const clock = new THREE.Clock();
@@ -95,6 +103,13 @@
 
         const startButton = document.querySelector("#startButton");
         const stopButton = document.querySelector("#stopButton");
+        const loadingScreen = document.querySelector("#loading-screen");
+
+        // Wait for both the video and model to be fully downloaded before showing buttons
+        Promise.all([loadVideo, loadModel]).then(() => {
+            loadingScreen.style.display = 'none';
+            document.querySelector("#control").style.display = 'flex';
+        });
 
         startButton.addEventListener("click", () => {
             start();
@@ -118,13 +133,48 @@
             overflow: hidden;
         }
 
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.85);
+            color: white;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            backdrop-filter: blur(10px);
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
         #control {
             position: fixed;
             bottom: 30px;
             left: 0;
             width: 100%;
             z-index: 10;
-            display: flex;
+            display: none;
+            /* Hidden strictly via display: none until Promise.all resolves */
             justify-content: center;
             gap: 15px;
             pointer-events: none;
@@ -154,6 +204,10 @@
 </head>
 
 <body>
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <div>Loading 3D Assets...</div>
+    </div>
     <div id="control">
         <button id="startButton">Start</button>
         <button id="stopButton">Stop</button>
