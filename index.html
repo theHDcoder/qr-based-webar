@@ -1,33 +1,177 @@
+<!DOCTYPE html>
 <html>
 
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebAR Experience</title>
     <script type="importmap">
     {
       "imports": {
-	"three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-	"three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
-	"mindar-image-three":"https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+        "mindar-image-three":"https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
       }
     }
     </script>
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0d1b2a; /* Deep Blue Theme Background */
+            color: #fff;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Overlays Layer */
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(13, 27, 42, 0.95);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            transition: opacity 0.4s ease;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Branding Elements */
+        h1 {
+            color: #ffc300; /* Yellow Accent */
+            margin-bottom: 30px;
+            text-shadow: 0 2px 10px rgba(255, 195, 0, 0.4);
+            font-weight: 600;
+        }
+
+        /* Beautiful Buttons */
+        .primary-btn {
+            background: linear-gradient(135deg, #774936, #5c3520); /* Brown gradients */
+            color: #ffc300;
+            border: 2px solid #ffc300;
+            padding: 16px 40px;
+            font-size: 1.2rem;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(255, 195, 0, 0.2);
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 1px;
+            pointer-events: auto;
+        }
+        .primary-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(255, 195, 0, 0.4);
+            background: linear-gradient(135deg, #8d5524, #774936);
+        }
+        .primary-btn:active {
+            transform: translateY(1px);
+        }
+
+        /* Spinners */
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 195, 0, 0.2);
+            border-top-color: #ffc300; /* Yellow spinning */
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: #e0e1dd;
+            font-size: 1.1rem;
+        }
+
+        /* Scannner instructions */
+        #instruction {
+            position: absolute;
+            top: 20%;
+            width: 90%;
+            left: 5%;
+            text-align: center;
+            background: rgba(13, 27, 42, 0.8);
+            border: 1px solid #774936;
+            color: #ffc300;
+            padding: 15px 20px;
+            border-radius: 12px;
+            z-index: 5;
+            font-size: 1.1rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            pointer-events: none;
+            box-sizing: border-box;
+        }
+
+    </style>
+</head>
+
+<body>
+
+    <!-- Container for MindAR video and webgl -->
+    <div id="container"></div>
+
+    <!-- UI Overlay for Start -->
+    <div id="start-overlay" class="overlay">
+        <h1>AR Explorer</h1>
+        <button id="start-btn" class="primary-btn">Start Experience</button>
+    </div>
+
+    <!-- UI Overlay for Loading -->
+    <div id="load-overlay" class="overlay hidden">
+        <div class="spinner"></div>
+        <div class="loading-text">Loading 3D Models...</div>
+    </div>
+
+    <!-- Scanner Instruction -->
+    <div id="instruction" class="hidden">
+        Please point your camera at the target image.
+    </div>
+
+    <!-- Main Logic -->
     <script type="module">
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         import { MindARThree } from 'mindar-image-three';
 
+        // UI references
+        const startOverlay = document.getElementById('start-overlay');
+        const loadOverlay = document.getElementById('load-overlay');
+        const instruction = document.getElementById('instruction');
+        const startBtn = document.getElementById('start-btn');
+
+        // MindAR System
         const mindarThree = new MindARThree({
             container: document.querySelector("#container"),
             imageTargetSrc: "targets.mind"
         });
         const { renderer, scene, camera } = mindarThree;
 
-        // Fix black texture processing on GLTF models
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1.0;
 
-        // Add proper lighting to illuminate the 3D model textures
         const ambientLight = new THREE.AmbientLight(0xffffff, 1.25);
         scene.add(ambientLight);
 
@@ -37,183 +181,272 @@
 
         const anchor = mindarThree.addAnchor(0);
 
-        // 1) Video setup wrapped in Promise
-        const video = document.createElement('video');
-        video.crossOrigin = 'anonymous';
-        video.loop = true;
-        video.muted = true;
-        video.playsInline = true;
+        // Core assets
+        const models = [];
+        const loaders = new GLTFLoader();
+        let mixers = [];
+        const sprites = [];
+        const spriteGroup = new THREE.Group();
+        anchor.group.add(spriteGroup);
 
-        const loadVideo = new Promise((resolve) => {
-            video.onloadeddata = () => resolve();
-            video.src = 'video/Big_Buck_Bunny_360_10s_2MB.mp4';
-            video.load();
-        });
+        // Raycasting for touch/click selection of the augmented buttons
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
 
-        const videoTexture = new THREE.VideoTexture(video);
-        const geometry = new THREE.PlaneGeometry(1, 0.5625);
-        const material = new THREE.MeshBasicMaterial({ map: videoTexture, transparent: true });
-        const plane = new THREE.Mesh(geometry, material);
+        function handlePointerSelection(event) {
+            if (spriteGroup.children.length === 0) return;
+            
+            let clientX, clientY;
+            if (event.type === 'touchstart' && event.touches && event.touches.length > 0) {
+                clientX = event.touches[0].clientX;
+                clientY = event.touches[0].clientY;
+            } else if (event.type === 'click') {
+                clientX = event.clientX;
+                clientY = event.clientY;
+            } else return;
 
-        // Video plane matches the 3D model's rotation exactly to sit flush, offset along Z to float "above" model
-        plane.rotation.set(Math.PI / 2, 0, 0);
-        plane.position.set(0, 0, 1.0); // Doubled from 0.5 to 1.0 to increase height above tracker card
+            const canvas = renderer.domElement;
+            const rect = canvas.getBoundingClientRect();
 
-        anchor.group.add(plane);
+            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
-        // 2) 3D Model setup wrapped in Promise
-        const loader = new GLTFLoader();
-        let mixer = null;
+            raycaster.setFromCamera(mouse, camera);
 
-        const loadModel = new Promise((resolve) => {
-            loader.load('model/source/animated helicopter-1.glb', (gltf) => {
-                const model = gltf.scene;
-
-                // Center it exactly on the image anchor origin.
-                model.position.set(0, 0, 0);
-
-                // Rotate the model so it aligns properly with the tracking card instead of standing out sideways
-                model.rotation.set(Math.PI / 2, 0, 0);
-
-                model.scale.set(0.15, 0.15, 0.15);
-                anchor.group.add(model);
-
-                if (gltf.animations && gltf.animations.length) {
-                    mixer = new THREE.AnimationMixer(model);
-                    const action = mixer.clipAction(gltf.animations[0]);
-                    action.play();
+            const intersects = raycaster.intersectObjects(spriteGroup.children, false);
+            if (intersects.length > 0) {
+                const selected = intersects[0].object;
+                if (selected.userData && selected.userData.id !== undefined) {
+                     showActiveModel(selected.userData.id);
                 }
-                resolve();
-            });
+            }
+        }
+        
+        window.addEventListener('click', handlePointerSelection);
+        window.addEventListener('touchstart', handlePointerSelection, { passive: true });
+
+        // Generate canvas textures for the circular generic sprite buttons
+        function createCircularTexture(text, isActive) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            ctx.beginPath();
+            ctx.arc(128, 128, 110, 0, 2 * Math.PI, false);
+            ctx.fillStyle = isActive ? '#ffc300' : 'rgba(119, 73, 54, 0.9)'; 
+            ctx.fill();
+            ctx.lineWidth = 10;
+            ctx.strokeStyle = '#ffc300';
+            ctx.stroke();
+
+            ctx.font = 'bold 50px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = isActive ? '#0d1b2a' : '#ffffff';
+            ctx.fillText(text, 128, 128);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.colorSpace = THREE.SRGBColorSpace;
+            return texture;
+        }
+
+        const spriteData = [
+            { id: 0, text: 'Sup' },
+            { id: 1, text: 'Heli' },
+            { id: 2, text: 'Cube' },
+            { id: 3, text: 'Sphr' },
+            { id: 4, text: 'Cone' }
+        ];
+
+        const planeGeo = new THREE.PlaneGeometry(1, 1);
+
+        spriteData.forEach((data, index) => {
+            const texActive = createCircularTexture(data.text, true);
+            const texInactive = createCircularTexture(data.text, false);
+            
+            const matActive = new THREE.MeshBasicMaterial({ map: texActive, transparent: true, depthWrite: false });
+            const matInactive = new THREE.MeshBasicMaterial({ map: texInactive, transparent: true, depthWrite: false });
+
+            const sprite = new THREE.Mesh(planeGeo, matInactive);
+            sprite.scale.set(0.2, 0.2, 1);
+            
+            const spacing = 0.24;
+            // Center the 5 buttons horizontally
+            const startX = -((spriteData.length - 1) * spacing) / 2;
+            // Place at bottom of image target (in front of model) and slightly lifted off the card to prevent intersection
+            sprite.position.set(startX + index * spacing, -0.45, 0.05); 
+            
+            sprite.userData = {
+                id: index,
+                baseY: -0.45,
+                matActive: matActive,
+                matInactive: matInactive,
+                targetScale: 0.2
+            };
+            
+            spriteGroup.add(sprite);
+            sprites.push(sprite);
         });
 
-        const clock = new THREE.Clock();
+        // Toggling functionality
+        const showActiveModel = (index) => {
+            models.forEach((m, idx) => {
+                m.visible = (idx === index);
+            });
+            sprites.forEach(sprite => {
+                if (sprite.userData.id === index) {
+                    sprite.material = sprite.userData.matActive;
+                    sprite.userData.targetScale = 0.26; // Animate slightly larger
+                } else {
+                    sprite.material = sprite.userData.matInactive;
+                    sprite.userData.targetScale = 0.2;
+                }
+            });
+        };
 
-        // Always run the animation loop so the 3D model animates continuously
+        // Async Loader structure
+        const loadModels = async () => {
+            const loadGLTF = (path, setupCallback) => {
+                return new Promise((resolve, reject) => {
+                    loaders.load(path, (gltf) => {
+                        const m = gltf.scene;
+
+                        // Fix see-through issues
+                        m.traverse((node) => {
+                            if (node.isMesh && node.material) {
+                                node.material.transparent = false;
+                                node.material.depthWrite = true;
+                                node.material.alphaTest = 0.5;
+                            }
+                        });
+                        
+                        setupCallback(m);
+                        
+                        if (gltf.animations && gltf.animations.length) {
+                            const mixer = new THREE.AnimationMixer(m);
+                            const action = mixer.clipAction(gltf.animations[0]);
+                            action.play();
+                            mixers.push(mixer);
+                        }
+                        
+                        anchor.group.add(m);
+                        m.visible = false; // Add to anchor but hide
+                        models.push(m);
+                        resolve();
+                    }, undefined, reject);
+                });
+            };
+
+            // Setup primitives materials matching theme
+            const primitiveMat = new THREE.MeshStandardMaterial({ color: 0xffc300, roughness: 0.3, metalness: 0.5 });
+            
+            // 0: sup.glb
+            await loadGLTF('model/sup.glb', (m) => {
+                m.position.set(0, 0, 0);
+                m.rotation.set(Math.PI / 2, 0, 0);
+                m.scale.set(0.03, 0.03, 0.03);
+            });
+
+            // 1: Helicopter (URL encode the space)
+            await loadGLTF('model/source/animated%20helicopter-1.glb', (m) => {
+                m.position.set(0, 0, 0);
+                m.rotation.set(Math.PI / 2, 0, 0);
+                // Standard default scale for secondary models, can be tweaked
+                m.scale.set(0.2, 0.2, 0.2); 
+            });
+
+            // 2: Cube
+            const cubeMesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), primitiveMat);
+            cubeMesh.visible = false;
+            cubeMesh.position.set(0, 0, 0);
+            anchor.group.add(cubeMesh);
+            models.push(cubeMesh);
+
+            // 3: Sphere
+            const sphereMesh = new THREE.Mesh(new THREE.SphereGeometry(0.3, 32, 16), primitiveMat);
+            sphereMesh.visible = false;
+            sphereMesh.position.set(0, 0, 0);
+            anchor.group.add(sphereMesh);
+            models.push(sphereMesh);
+
+            // 4: Cylinder
+            const coneMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.6, 32), primitiveMat);
+            coneMesh.rotation.set(Math.PI / 2, 0, 0); // Stand upright along Z-axis of tracking card
+            coneMesh.position.set(0, 0, 0);
+            coneMesh.visible = false;  
+            anchor.group.add(coneMesh);
+            models.push(coneMesh);
+        }
+
+        // Animation Loop
+        const clock = new THREE.Clock();
         renderer.setAnimationLoop(() => {
             const delta = clock.getDelta();
-            if (mixer) mixer.update(delta);
+            const elapsed = clock.getElapsedTime();
+
+            mixers.forEach(mixer => mixer.update(delta));
+            
+            // Blinking effect to point user to click
+            const blinkOpacity = 0.4 + 0.6 * Math.abs(Math.sin(elapsed * 3));
+
+            sprites.forEach((sprite) => {
+                // Ensure stable position since floating animation is removed
+                sprite.position.y = sprite.userData.baseY;
+
+                // Smooth scale transition when active vs inactive
+                if (sprite.userData.targetScale) {
+                    sprite.scale.x += (sprite.userData.targetScale - sprite.scale.x) * delta * 15;
+                    sprite.scale.y += (sprite.userData.targetScale - sprite.scale.y) * delta * 15;
+                }
+
+                // Apply blinking effect to inactive buttons so user knows they are clickable
+                if (sprite.material === sprite.userData.matInactive) {
+                    sprite.material.opacity = blinkOpacity;
+                } else {
+                    sprite.material.opacity = 1.0; // Selected one stays fully solid
+                }
+            });
+
             renderer.render(scene, camera);
         });
 
-        const start = async () => {
-            await mindarThree.start();
-            video.play();
-        }
+        // Events
+        anchor.onTargetFound = () => {
+            instruction.classList.add('hidden');
+        };
 
-        const startButton = document.querySelector("#startButton");
-        const stopButton = document.querySelector("#stopButton");
-        const loadingScreen = document.querySelector("#loading-screen");
+        anchor.onTargetLost = () => {
+            instruction.classList.remove('hidden');
+        };
 
-        // Wait for both the video and model to be fully downloaded before showing buttons
-        Promise.all([loadVideo, loadModel]).then(() => {
-            loadingScreen.style.display = 'none';
-            document.querySelector("#control").style.display = 'flex';
-        });
+        // App Flow Sequence
+        startBtn.addEventListener('click', async () => {
+            // 1. Hide start, show load
+            startOverlay.classList.add('hidden');
+            loadOverlay.classList.remove('hidden');
 
-        startButton.addEventListener("click", () => {
-            start();
-        });
-        stopButton.addEventListener("click", () => {
-            video.pause();
-            mindarThree.stop();
-        });
-    </script>
-    <style>
-        body {
-            margin: 0;
-            font-family: sans-serif;
-            background-color: #000;
-        }
+            try {
+                // 2. Load all models
+                await loadModels();
 
-        #container {
-            width: 100vw;
-            height: 100vh;
-            position: relative;
-            overflow: hidden;
-        }
+                // Defaults to 1st model loaded (sup.glb)
+                showActiveModel(0);
 
-        #loading-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background-color: rgba(0, 0, 0, 0.85);
-            color: white;
-            z-index: 20;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            font-weight: bold;
-            backdrop-filter: blur(10px);
-            flex-direction: column;
-            gap: 15px;
-        }
+                // 3. Hide loader, show scanner instructions
+                loadOverlay.classList.add('hidden');
+                instruction.classList.remove('hidden');
 
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: #fff;
-            animation: spin 1s ease-in-out infinite;
-        }
+                // 4. Start AR / Camera
+                await mindarThree.start();
 
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
+            } catch (err) {
+                console.error("Error loading resources: ", err);
+                loadOverlay.innerHTML = "<div class='loading-text'>There was an error loading the 3D models. Please refresh.</div>";
             }
-        }
+        });
 
-        #control {
-            position: fixed;
-            bottom: 30px;
-            left: 0;
-            width: 100%;
-            z-index: 10;
-            display: none;
-            /* Hidden strictly via display: none until Promise.all resolves */
-            justify-content: center;
-            gap: 15px;
-            pointer-events: none;
-            /* Allows pressing screen objects behind the container div */
-        }
-
-        button {
-            pointer-events: auto;
-            /* Buttons themselves stay clickable */
-            padding: 14px 28px;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 50px;
-            border: none;
-            cursor: pointer;
-            background-color: #ffffff;
-            color: #111;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-            transition: transform 0.1s ease-in-out;
-        }
-
-        button:active {
-            transform: scale(0.95);
-            background-color: #eeeeee;
-        }
-    </style>
-</head>
-
-<body>
-    <div id="loading-screen">
-        <div class="spinner"></div>
-        <div>Loading 3D Assets...</div>
-    </div>
-    <div id="control">
-        <button id="startButton">Start</button>
-        <button id="stopButton">Stop</button>
-    </div>
-    <div id="container">
-    </div>
+    </script>
 </body>
 
 </html>
